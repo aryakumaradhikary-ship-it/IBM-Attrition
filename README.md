@@ -4,6 +4,8 @@ An exploratory data analysis and logistic regression model examining
 factors associated with employee attrition, using IBM's HR Analytics 
 Employee Attrition & Performance dataset from Kaggle.
 
+**[View the full report here](https://aryakumaradhikary-ship-it.github.io/IBM-Attrition/index.html)**
+
 ## Contents
 - `IBM.Rmd` — full R Markdown analysis (code + narrative)
 - `IBM.html` — knitted report (open in a browser to view)
