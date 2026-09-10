@@ -1,0 +1,228 @@
+---
+title: "HR Attrition Analysis"
+author: "By: Arya Adhikary"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  message = FALSE,
+  warning = FALSE,
+  echo = FALSE
+)
+
+library(tidyverse)
+```
+
+## Introduction
+This analysis explores the IBM HR Analytics Employee Attrition dataset to understand which factors are associated with employees leaving the company. The dataset has information from 1,470 employees (rows) and 35 attributes (columns) covering demographics like job role, compensation, and satisfaction measures. This analysis examines the role that income, overtime, job satisfaction, and work-life balance play in employee attrition. 
+
+```{r include=FALSE}
+
+hr <- read_csv("WA_Fn-UseC_-HR-Employee-Attrition(in).csv")
+head(hr)
+colSums(is.na(hr))
+
+```
+
+## Missing Data
+
+A check of the dataset, through the line colSums(is.na(hr)), confirms that there are no missing values. This is surprising, as there typically missing values in HR data from the real world, but I suppose it is expected since this is a fictional dataset. 
+
+## Attrition Overview
+
+```{r}
+
+hr %>%
+  count(Attrition) %>%
+  mutate(pct = round(n/sum(n) * 100, 1))
+
+
+
+```
+
+Of the 1,470 employees in the dataset, 83.9% stayed with company, while 16.1% left. This class imbalance is important to keep in mind, as a model that simply predicted "No" for every employee would already be about 84% accurate without having to learn anything meaningful. This means that the overall accuracy alone won't be a reliable indicator of model quality later. We should also examine how well the model identifies the employees who actually left. 
+
+
+## Attrition by Department
+```{r}
+hr %>%
+  ggplot(aes(x = Department, fill = Attrition)) + 
+  geom_bar(position = "fill") + 
+  labs (
+  title = "Attrition Rate by Department", 
+  x = "Department", 
+  y = "Proportion", 
+  fill = "Attrition"
+) + 
+  scale_fill_manual(values = c("No" = "#CC6666", "Yes" = "firebrick"))
+
+
+```
+
+Sales has the highest attrition rate at roughly 21%, followed closely by Human Resources at 19%. Research & Development has the lowest attrition rate, at about 13%. This may reflect differences in job pressure, external market demand for sales talent or workplace condition across departments.
+
+## Attrition and Overtime
+
+```{r}
+
+hr %>%
+  ggplot(aes(x = OverTime, fill = Attrition)) + 
+  geom_bar(position = "fill") + 
+  labs (
+    title = "Attrition Rate by Overtime Status", 
+    x = "Works Overtime", 
+    y = "Proportion", 
+    fill = "Attrition"
+  ) + 
+  scale_fill_manual(values = c("No" = "#CC6666", "Yes" = "firebrick"))
+
+
+
+```
+
+
+Employees who work overtime leave roughly three times the rate of employees who don't, with a 30% attrition rate compared to 10%. This is one of the strongest patterns in the dataset and suggests overtime workload is a major driver in turnover, likely tying into burnout or work-life inbalance.
+
+## Income and Attrition
+Compensation is a common factor in employee turnover. The chart below displays the monthly income of employees who stayed and those who left.
+
+```{r}
+
+hr %>%
+  ggplot(aes(x = Attrition, y = MonthlyIncome, fill = Attrition)) + 
+  geom_boxplot() + 
+  labs(
+    title = "Monthly Income by Attrition",
+    x = "Attrition", 
+    y = "Monthly Income"
+  ) + 
+  scale_fill_manual(values = c("No" = "#CC6666", "Yes" = "firebrick")) + theme(legend.position = "none")
+
+```
+
+
+
+
+
+Employees who left had a noticeable lower median monthly income (around $3,400) compared to those who stayed (around $5,200). This supports the idea that lower-paid employees are more likely to leave, though the wide spread and overlapping boxes suggest income alone cannot fully explain attrition. Rather, it likely interacts with other factors like job level/specific role. 
+
+
+## Job Satisfaction and Work-Life Balance
+
+Job satisfaction is measured on a 1-4 scale (Low, Median, High, and Very High). The bar graph below checks whether lower satisfaction is associated with higher attrition. 
+
+```{r}
+
+hr %>%
+  ggplot(aes(x = factor(JobSatisfaction), fill = Attrition)) + geom_bar(position = "fill") + 
+  labs(
+    title = "Attrition Rate by Job Satisfaction", 
+    x = "Job Satsifaction (1 = Low, 4 = Very High)", 
+    y = "Proportion", 
+    fill = "Attrition"
+  ) + scale_fill_manual(values = c("No" = "#CC6666", "Yes" = "firebrick"))
+
+
+```
+
+There is a general downward trend in attrition as job satisfaction increases. Employees with the lowest satisfaction (level 1) leave at roughly 23%, compared to about 11% for those with the highest satisfaction (level 4). The relationship isn't perfectly linear though, as levels 2 and 3 show similar attrition rates. However, the overall pattern supports the idea that job satisfaction is a meaningful, if not overwhelming, factor in retention.
+
+
+## Summary Table: Attrition by Department and OverTime
+The table below breaks down attrition counts and rates by department and overtime status, combining two of the strongest patterns seen so far. 
+
+```{r}
+
+
+
+
+hr %>%
+  group_by(Department, OverTime) %>%
+  summarize(
+    n = n(),
+    left = sum(Attrition == "Yes"),
+    attrition_rate = round(left/n,3),
+    .groups = "drop"
+  )
+
+
+```
+
+From this summary table, we can deduce that overtime consistently roughly doubles or triples attrition risk within every department, the effect is most extreme in Sales, with employees who work overtime leave at a rate of 37.5% and those who don't having a 13.8% turnover rate. Research & Development shows the lowest baseline attrition (8.6%) without overtime, but still jumps to 27.3% with overtime. This suggests overtime and department combine to create especially high-risk groups. Sales employees working overtime stand out as the group most likely to leave. 
+
+## Predicting Attrition Using a Logistic Regression
+
+```{r}
+
+
+
+
+model <- glm(Attrition == "Yes" ~ OverTime + MonthlyIncome + JobSatisfaction + Department + Age,
+             data = hr,
+             family = "binomial")
+
+summary(model)
+
+```
+
+The model confirms that overtime, income, job satisfaction, and age as statistically significant predictors of attrition (all p < .001). Employees who work overtime have sharply higher odds of leaving, while higher income, higher job satisfaction, and older age are all associated with lower odds of leaving. Interestingly, department is not a statistically significant predictor once these other factors are controlled for (p > .15 for both Research & Development and Sales relative to Human Resources), suggesting department's apparent effect in the raw EDA was likely driven by differences in overtime rates and compensation across departments, rather than the department itself.
+
+
+```{r}
+
+exp(coef(model))
+```
+
+Exponentiating the coefficients converts them to odds ratios. Working overtime was the strongest predictor by far, as it multiplied the odds of leaving by about 4.4 times while holding income, satisfaction, department, and age constant. Each one-point increase in job satisfaction (on the 1-4 scale) reduced the odds of leaving by about 27%, and each additional year of age reduced the odds by about 3.4%. Income had a small per-dollar effect that compounds meaningfully at scale. For example, $1,000 in additional monthly income was associated with roughly an 11% reduction in the odds of leaving. Department showed no statistically significant effect once these other factors were accounted for.
+
+
+```{r}
+
+hr <- hr %>%
+  mutate(predicted_prob = predict(model, type = "response"),
+         predicted_class = ifelse(predicted_prob > 0.5, "Yes", "No"))
+
+
+accuracy <- mean(hr$predicted_class == hr$Attrition)
+accuracy
+
+table(Predicted = hr$predicted_class, Actual = hr$Attrition)
+
+
+
+```
+
+While overall accuracy is 84.6%, this number is misleading given the class imbalance noted earlier. Simply predicting "No" for everyone would already yield about 84% accuracy. The confusion matrix reveals the model's real limitation: of the 237 employees who actually left, it correctly identified only 30 (about 13%), missing the vast majority of actual attrition cases. This happens because the 0.5 probability threshold is biased toward the majority class when one outcome is rare. In a real HR context, this is an important limitation since a model meant to flag at-risk employees needs to catch actual leavers, not just be "accurate" overall. A lower classification threshold (ex: 0.3 instead of 0.5) would likely catch more true leavers at the cost of more false alarms and would be worth exploring if this model were used operationally.
+
+Let's see if lowering the classification threshold improves the model's ability to catch actual leavers, at the cost of more false alarms.
+
+```{r}
+hr <- hr %>%
+  mutate(predicted_class_03 = ifelse(predicted_prob > 0.3, "Yes", "No"))
+
+table(Predicted = hr$predicted_class_03, Actual = hr$Attrition)
+```
+
+Lowering the threshold to 0.3 substantially improves the model's ability to catch actual leavers. With this threshold, the model correctly identified 100 out of 237 (about 42%) compared to just 30 (about 13%) at the 0.5 threshold. This comes at a cost, however: false positives increase from 20 to 124, meaning the model now flags many more employees as at-risk who ultimately stay. This confirms that threshold choice involves a real trade-off between catching more true leavers and generating more false alarms, and the "right" threshold would depend on how the model is actually used. For example, an HR team doing outreach to at-risk employees might tolerate more false positives in exchange for catching more real cases.
+
+## Conclusion
+- Overtime was the strongest predictor of attrition. Employees who work overtime are about 4.4 times more likely to leave than those who don't.
+- Higher job satisfaction, higher income, and older age were all associated with lower odds of leaving.
+- Department showed a clear pattern in the raw data (Sales and HR higher than R&D), but was not statistically significant once overtime, income, satisfaction, and age were accounted for. This suggests that its apparent effect was driven by these other factors.
+- The logistic regression model achieved 84.6% overall accuracy, but this is misleading given that "no" is the majority outcome. The model only correctly identified about 13% of employees who actually left, highlighting a common challenge in imbalanced classification problems.
+
+
+
+
+
+
+
+
+
+
+
